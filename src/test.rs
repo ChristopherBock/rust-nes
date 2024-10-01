@@ -41,6 +41,23 @@ mod test {
             assert!(cpu.status & 0b0000_0001 == 0b00);
         }
     }
+
+    fn check_decimal_flag(cpu: &CPU, expected_decimal_flag: bool) {
+        if expected_decimal_flag {
+            assert!(cpu.status & 0b0000_1000 == 0b1000);
+        } else {
+            assert!(cpu.status & 0b0000_1000 == 0b00);
+        }
+    }
+
+    fn check_interrupt_disable_flag(cpu: &CPU, expected_interrupt_disable_flag: bool) {
+        if expected_interrupt_disable_flag {
+            assert!(cpu.status & 0b0000_0100 == 0b100);
+        } else {
+            assert!(cpu.status & 0b0000_0100 == 0b00);
+        }
+    }
+
     fn check_overflow_flag(cpu: &CPU, expected_overflow_flag: bool) {
         if expected_overflow_flag {
             assert!(cpu.status & 0b0100_0000 == 0b0100_0000);
@@ -370,6 +387,23 @@ mod test {
     }
 
     #[test]
+    fn test_bmi () {
+        let mut cpu = CPU::new();
+        cpu.reset();
+        cpu.status = 0b1000_0000;
+        cpu.interpret_without_reset(vec![0x30, 0x01, 0x00, 0xE8, 0x00], 0x00);
+
+        assert_eq!(cpu.program_counter, 0x05);
+        assert_eq!(cpu.register_x, 0x01);
+
+        cpu.reset();
+        cpu.interpret_without_reset(vec![0x30, 0x01, 0x00, 0xE8, 0x00], 0x00);
+
+        assert_eq!(cpu.program_counter, 0x03);
+        assert_eq!(cpu.register_x, 0x00);
+    }
+
+    #[test]
     fn test_bne () {
         let mut cpu = CPU::new();
         cpu.reset();
@@ -410,12 +444,75 @@ mod test {
     }
 
     #[test]
+    fn test_bvc () {
+        let mut cpu = CPU::new();
+        cpu.reset();
+        cpu.interpret_without_reset(vec![0x50, 0x01, 0x00, 0xE8, 0x00], 0x00);
+
+        assert_eq!(cpu.program_counter, 0x05);
+        assert_eq!(cpu.register_x, 0x01);
+
+        cpu.reset();
+        cpu.status = 0b0100_0000;
+        cpu.interpret_without_reset(vec![0x50, 0x01, 0x00, 0xE8, 0x00], 0x00);
+
+        assert_eq!(cpu.program_counter, 0x03);
+        assert_eq!(cpu.register_x, 0x00);
+    }
+
+    #[test]
+    fn test_bvs () {
+        let mut cpu = CPU::new();
+        cpu.reset();
+        cpu.status = 0b0100_0000;
+        cpu.interpret_without_reset(vec![0x70, 0x01, 0x00, 0xE8, 0x00], 0x00);
+
+        assert_eq!(cpu.program_counter, 0x05);
+        assert_eq!(cpu.register_x, 0x01);
+
+        cpu.reset();
+        cpu.interpret_without_reset(vec![0x70, 0x01, 0x00, 0xE8, 0x00], 0x00);
+
+        assert_eq!(cpu.program_counter, 0x03);
+        assert_eq!(cpu.register_x, 0x00);
+    }
+
+    #[test]
     fn test_clc_and_sec () {
         let mut cpu = CPU::new();
         opcode_test_case!{
             cpu,
             0x18, &AddressingMode::NoneAddressing, 0b0000_0001, {cpu.status = 0b0000_0001; check_carry_flag(&cpu, true);}, check_carry_flag(&cpu, false), 0,
             0x38, &AddressingMode::NoneAddressing, 0b0000_0000, {cpu.status = 0b0000_0000; check_carry_flag(&cpu, false);}, check_carry_flag(&cpu, true), 0,
+        }
+    }
+
+    #[test]
+    fn test_cld_and_sed () {
+        let mut cpu = CPU::new();
+        opcode_test_case!{
+            cpu,
+            0xD8, &AddressingMode::NoneAddressing, 0b0000_1000, {cpu.status = 0b0000_1000; check_decimal_flag(&cpu, true);}, check_decimal_flag(&cpu, false), 0,
+            0xF8, &AddressingMode::NoneAddressing, 0b0000_0000, {cpu.status = 0b0000_0000; check_decimal_flag(&cpu, false);}, check_decimal_flag(&cpu, true), 0,
+        }
+    }
+
+    #[test]
+    fn test_cli_and_sei () {
+        let mut cpu = CPU::new();
+        opcode_test_case!{
+            cpu,
+            0x58, &AddressingMode::NoneAddressing, 0b0000_0100, {cpu.status = 0b0000_0100; check_interrupt_disable_flag(&cpu, true);}, check_interrupt_disable_flag(&cpu, false), 0,
+            0x78, &AddressingMode::NoneAddressing, 0b0000_0000, {cpu.status = 0b0000_0000; check_interrupt_disable_flag(&cpu, false);}, check_interrupt_disable_flag(&cpu, true), 0,
+        }
+    }
+
+    #[test]
+    fn test_clv () {
+        let mut cpu = CPU::new();
+        opcode_test_case!{
+            cpu,
+            0xB8, &AddressingMode::NoneAddressing, 0b0100_0000, {cpu.status = 0b0100_0000; check_overflow_flag(&cpu, true);}, check_overflow_flag(&cpu, false), 0,
         }
     }
 
@@ -568,6 +665,26 @@ mod test {
     }
 
     #[test]
+    fn test_eor () {
+        let mut cpu = CPU::new();
+        let xydeviation = 7 as u8;
+        opcode_test_case!{
+            cpu,
+            0x49, &AddressingMode::Immediate,   0b0101_0101, cpu.register_a = 0b0000_0101, assert_eq!(cpu.register_a, 0b0101_0000), 0,
+            0x49, &AddressingMode::Immediate,   0b0111_0101, cpu.register_a = 0b0000_0001, {assert_eq!(cpu.register_a, 0b0111_0100); check_zero_and_neg_flags(&cpu, false, false);}, 0,
+            0x49, &AddressingMode::Immediate,   0b1000_0010, cpu.register_a = 0b0000_0001, {assert_eq!(cpu.register_a, 0b1000_0011); check_zero_and_neg_flags(&cpu, false, true);}, 0,
+            0x49, &AddressingMode::Immediate,   0b0000_0000, cpu.register_a = 0b0000_0000, {assert_eq!(cpu.register_a, 0b0000_0000); check_zero_and_neg_flags(&cpu, true, false);}, 0,
+            0x45, &AddressingMode::ZeroPage,    0b0101_0111, cpu.register_a = 0b0101_0000, assert_eq!(cpu.register_a, 0b0000_0111), 0,
+            0x55, &AddressingMode::ZeroPageX,   0b0101_0111, {cpu.register_a = 0b0011_0011; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0b0110_0100), xydeviation,
+            0x41, &AddressingMode::IndirectX,   0b0101_0111, {cpu.register_a = 0b0101_0000; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0b0000_0111), xydeviation,
+            0x51, &AddressingMode::IndirectY,   0b0101_0110, {cpu.register_a = 0b0010_0010; cpu.register_y = xydeviation;}, assert_eq!(cpu.register_a, 0b0111_0100), xydeviation,
+            0x4D, &AddressingMode::Absolute,    0b0101_1110, cpu.register_a = 0b0000_0011, assert_eq!(cpu.register_a, 0b0101_1101), 0,
+            0x5D, &AddressingMode::AbsoluteX,   0b0010_0111, {cpu.register_a = 0b0000_0011; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0b0010_0100), xydeviation,
+            0x59, &AddressingMode::AbsoluteY,   0b0001_0101, {cpu.register_a = 0b0000_1000; cpu.register_y = xydeviation;}, assert_eq!(cpu.register_a, 0b0001_1101), xydeviation,
+        }
+    }
+
+    #[test]
     fn test_inx () {
         let mut cpu = CPU::new();
         opcode_test_case!{
@@ -583,6 +700,27 @@ mod test {
             }, 0,
             0xE8, &AddressingMode::NoneAddressing, 0x94, {cpu.register_x = 0x94;}, {
                 assert_eq!(cpu.register_x, 0x95);
+                check_zero_and_neg_flags(&cpu, false, true);
+            }, 0,
+        }
+    }
+
+    #[test]
+    fn test_iny () {
+        let mut cpu = CPU::new();
+        opcode_test_case!{
+            cpu,
+            0xC8, &AddressingMode::NoneAddressing, 0x23, {cpu.register_y = 0x23;}, assert_eq!(cpu.register_y, 0x24), 0,
+            0xC8, &AddressingMode::NoneAddressing, 0xFF, {cpu.register_y = 0xFF;}, {
+                assert_eq!(cpu.register_y, 0x00);
+                check_zero_and_neg_flags(&cpu, true, false);
+            }, 0,
+            0xC8, &AddressingMode::NoneAddressing, 0x7F, {cpu.register_y = 0x7F;}, {
+                assert_eq!(cpu.register_y, 0x80);
+                check_zero_and_neg_flags(&cpu, false, true);
+            }, 0,
+            0xC8, &AddressingMode::NoneAddressing, 0x94, {cpu.register_y = 0x94;}, {
+                assert_eq!(cpu.register_y, 0x95);
                 check_zero_and_neg_flags(&cpu, false, true);
             }, 0,
         }
@@ -893,6 +1031,35 @@ mod test {
     }
 
     #[test]
+    fn test_pha_php_pla_plp () {
+        let mut cpu = CPU::new();
+        opcode_test_case!{
+            cpu,
+            // without carry set
+            0x48, &AddressingMode::NoneAddressing, 0b0000_0101, cpu.register_a = 0b0000_0101, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0101);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x08, &AddressingMode::NoneAddressing, 0b0000_0011, cpu.status = 0b0000_0011, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0011);
+                check_zero_and_neg_flags(&cpu, true, false);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x68, &AddressingMode::NoneAddressing, 0b1000_0111, cpu.register_a = 0b0000_0111, {
+                assert_eq!(cpu.register_a, 0b0000_0000);
+                check_zero_and_neg_flags(&cpu, true, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x28, &AddressingMode::NoneAddressing, 0b0000_0101, cpu.status = 0b0000_0101, {
+                assert_eq!(cpu.status, 0b0000_0000);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+        }
+    }
+
+    #[test]
     fn test_rol () {
         let mut cpu = CPU::new();
         let xydeviation = 7 as u8;
@@ -941,6 +1108,62 @@ mod test {
                 check_carry_flag(&cpu, false);
             }, 0,
         }
+    }
+
+    #[test]
+    fn test_ror () {
+        let mut cpu = CPU::new();
+        let xydeviation = 7 as u8;
+        opcode_test_case!{
+            cpu,
+            // without carry set
+            0x6A, &AddressingMode::NoneAddressing, 0b0000_0101, cpu.register_a = 0b0000_0101, {
+                assert_eq!(cpu.register_a, 0b0000_0010);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x66, &AddressingMode::ZeroPage,    0b0101_0110, cpu.register_a = 0b0101_0110, {
+                assert_eq!(cpu.last_mem_write_value, 0b0010_1011);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x76, &AddressingMode::ZeroPageX,   0b0000_0100, {cpu.register_a = 0b0000_0100; cpu.register_x = xydeviation;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0010);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, xydeviation,
+            0x6E, &AddressingMode::Absolute,    0b1101_1110, cpu.register_a = 0b1101_1110, {
+                assert_eq!(cpu.last_mem_write_value, 0b0110_1111);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x7E, &AddressingMode::AbsoluteX,   0b0000_0000, {cpu.register_a = 0b0000_0000; cpu.register_x = xydeviation;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0000);
+                check_zero_and_neg_flags(&cpu, true, false);
+                check_carry_flag(&cpu, false);
+            }, xydeviation,
+            // with carry set
+            0x6A, &AddressingMode::NoneAddressing, 0b0000_0101, {cpu.register_a = 0b0000_0101; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.register_a, 0b1000_0010);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x6A, &AddressingMode::NoneAddressing, 0b1000_0101, {cpu.register_a = 0b1000_0101; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.register_a, 0b1100_0010);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x6A, &AddressingMode::NoneAddressing, 0b0000_0000, {cpu.register_a = 0b0000_0000; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.register_a, 0b1000_0000);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+            }, 0,
+        }
+    }
+
+    #[test]
+    fn test_rti () {
+        todo!()
     }
 
     #[test]
