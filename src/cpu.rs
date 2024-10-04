@@ -10,6 +10,12 @@ Move to bitflags: https://docs.rs/bitflags/latest/bitflags/
  */
 
 use crate::opcodes;
+use crate::mem::Mem;
+use crate::bus::Bus;
+
+const STACK_START: u16 = 0x0100;
+const STACK_SIZE: u16 = 0x0100;
+const STACK_RESET: u8 = 0xFD;
 
 pub struct CPU {
     pub register_a: u8,
@@ -27,7 +33,7 @@ pub struct CPU {
     pub last_mem_write_value: u8,
     pub last_mem_write_value_u16: u16,
     pub last_mem_write_address: u16,
-    memory: [u8; 0xFFFF]
+    bus: Bus,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -43,6 +49,35 @@ pub enum AddressingMode {
     IndirectX,
     IndirectY,
     NoneAddressing,
+}
+
+impl Mem for CPU {
+    /*
+        Memory access
+     */
+    fn mem_read(&self, addr: u16) -> u8 {
+        self.bus.mem_read(addr)
+    }
+
+    fn mem_write(&mut self, addr: u16, data: u8) {
+        self.bus.mem_write(addr, data);
+        self.last_mem_write_address = addr;
+        self.last_mem_write_value = data;
+    }
+
+    fn mem_read_u16(&self, addr: u16) -> u16 {
+        u16::from_le_bytes([self.mem_read(addr), self.mem_read(addr + 1)])
+    }
+
+    fn mem_write_u16(&mut self, addr: u16, data: u16) {
+        let bytes = data.to_le_bytes();
+
+        self.mem_write(addr, bytes[0]);
+        self.mem_write(addr + 1, bytes[1]);
+
+        self.last_mem_write_address = addr;
+        self.last_mem_write_value_u16 = data;
+    }
 }
 
 /* Additional information
@@ -61,7 +96,7 @@ impl CPU {
             last_mem_write_address: 0,
             last_mem_write_value: 0,
             last_mem_write_value_u16: 0,
-            memory: [0; 0xFFFF],
+            bus: Bus::new(),
         }
     }
 
@@ -85,13 +120,15 @@ impl CPU {
     }
 
     pub fn load (&mut self, program: Vec<u8>, program_base_address: u16) {
-        self.memory[program_base_address as usize .. (program_base_address as usize + program.len())].copy_from_slice(&program[..]);
+        for i in 0..(program.len() as u16) {
+            self.mem_write(program_base_address + i, program[i as usize]);
+        }
         self.mem_write_u16(0xFFFC, program_base_address)
     }
 
     pub fn reset (&mut self) {
         self.register_a = 0;
-        self.register_s = 0xFD;
+        self.register_s = STACK_RESET;
         self.register_x = 0;
         self.register_y = 0;
         self.last_mem_write_value = 0;
@@ -100,7 +137,9 @@ impl CPU {
 
         self.status = 0;
 
-        self.memory[0x0100..0x0200].fill(0);
+        for i in STACK_START..(STACK_SIZE+STACK_START) {
+            self.mem_write(i, 0);
+        }
 
         self.program_counter = self.mem_read_u16(0xFFFC)
     }
@@ -248,43 +287,6 @@ impl CPU {
                 self.program_counter += (opcode.len - 1) as u16
             }
         }
-    }
-
-    /*
-        Memory access
-     */
-    pub fn mem_read(&self, addr: u16) -> u8 {
-        self.memory[addr as usize]
-    }
-
-    pub fn mem_write(&mut self, addr: u16, data: u8) {
-        self.memory[addr as usize] = data;
-        self.last_mem_write_value = data;
-        self.last_mem_write_address = addr;
-    }
-
-    fn mem_read_u16(&self, addr: u16) -> u16 {
-        /*let lo = self.mem_read(addr) as u16;
-        let hi = self.mem_read(addr + 1) as u16;
-
-        (hi << 8) | (lo as u16)*/
-        u16::from_le_bytes([self.mem_read(addr), self.mem_read(addr + 1)])
-    }
-
-    fn mem_write_u16(&mut self, addr: u16, data: u16) {
-        /*let hi = (data >> 8) as u8;
-        let lo = (data & 0xff) as u8;
-
-        self.mem_write(addr, lo);
-        self.mem_write(addr + 1, hi);*/
-
-        let bytes = data.to_le_bytes();
-
-        self.mem_write(addr, bytes[0]);
-        self.mem_write(addr + 1, bytes[1]);
-
-        self.last_mem_write_address = addr;
-        self.last_mem_write_value_u16 = data;
     }
 
     /*

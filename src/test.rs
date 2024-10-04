@@ -183,7 +183,6 @@ mod test {
                 result.extend_from_slice(&(address as u16).to_le_bytes());
                 result.extend_from_slice(&vec![0x00; xydeviation as usize]);
             },
-            _ => panic!("Unknown addressing mode when building instructions for test!")
         }
 
         result.push(0x00);
@@ -561,7 +560,6 @@ mod test {
     #[test]
     fn test_cpx_cpy () {
         let mut cpu = CPU::new();
-        let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
             // without carry set
@@ -755,17 +753,17 @@ mod test {
     fn test_jmp () {
         let mut cpu = CPU::new();
 
-        cpu.interpret(vec![0x4C, 0x02, 0x31, 0x00, 0x00]);
-        assert_eq!(cpu.program_counter, 0x3103);
-        cpu.interpret(vec![0x6C, 0x03, 0x06, 0x02, 0x41, 0x00, 0x00]); // default base address is (time of writing 0x0600)
-        assert_eq!(cpu.program_counter, 0x4103);
+        cpu.interpret(vec![0x4C, 0x02, 0x11, 0x00, 0x00]);
+        assert_eq!(cpu.program_counter, 0x1103);
+        cpu.interpret(vec![0x6C, 0x03, 0x06, 0x02, 0x11, 0x00, 0x00]); // default base address is (time of writing 0x0600)
+        assert_eq!(cpu.program_counter, 0x1103);
     }
 
     #[test]
     fn test_jsr () {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0x20, 0x02, 0x31, 0x00, 0x00]);
-        assert_eq!(cpu.program_counter, 0x3103);
+        cpu.interpret(vec![0x20, 0x02, 0x11, 0x00, 0x00]);
+        assert_eq!(cpu.program_counter, 0x1103);
         assert_eq!(cpu.register_s, 0xFB);
         assert_eq!(cpu.last_mem_write_address, 0x01FC); // check if it pushed something to the stack
         assert_eq!(cpu.last_mem_write_value_u16, 0x0603);
