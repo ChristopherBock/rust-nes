@@ -30,6 +30,7 @@ pub struct CPU {
     // N   V   -   B   D   I   Z   C
     pub status: u8,
     pub program_counter: u16,
+    pub start_override: u16,
     pub last_mem_write_value: u8,
     pub last_mem_write_value_u16: u16,
     pub last_mem_write_address: u16,
@@ -93,6 +94,7 @@ impl CPU {
             register_y: 0,
             status: 0,
             program_counter: 0,
+            start_override: 0,
             last_mem_write_address: 0,
             last_mem_write_value: 0,
             last_mem_write_value_u16: 0,
@@ -123,7 +125,7 @@ impl CPU {
         for i in 0..(program.len() as u16) {
             self.mem_write(program_base_address + i, program[i as usize]);
         }
-        self.mem_write_u16(0xFFFC, program_base_address)
+        self.start_override = program_base_address;
     }
 
     pub fn reset (&mut self) {
@@ -141,7 +143,11 @@ impl CPU {
             self.mem_write(i, 0);
         }
 
-        self.program_counter = self.mem_read_u16(0xFFFC)
+        if self.start_override != 0 {
+            self.program_counter = self.start_override;
+        } else {
+            self.program_counter = self.mem_read_u16(0xFFFC)
+        }
     }
 
     pub fn run<F> (&mut self, mut callback: F)

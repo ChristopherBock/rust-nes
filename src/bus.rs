@@ -36,7 +36,6 @@ const PROGRAM_START_END_ADDRESS: u16 = 0xFFFE;
 enum BusReadFrom {
     CpuRam,
     CartridgeProgramRom,
-    ProgramCounter,
 }
 
 pub struct Bus {
@@ -60,11 +59,8 @@ impl Bus {
                 let real_addr = addr & 0b0000_0111_1111_1111;
                 (BusReadFrom::CpuRam, real_addr)
             },
-            CARTRIDGE_START .. PROGRAM_START_ADDRESS => {
+            CARTRIDGE_START .. PROGRAM_START_END_ADDRESS => {
                 (BusReadFrom::CartridgeProgramRom, addr - CARTRIDGE_START)
-            },
-            PROGRAM_START_ADDRESS..PROGRAM_START_END_ADDRESS => {
-                (BusReadFrom::ProgramCounter, addr)
             },
             _ => {
                 println!("Read at {:x} not yet implemented", addr);
@@ -79,15 +75,6 @@ impl Mem for Bus {
         let (read_from, real_addr) = Bus::match_address(addr);
         match read_from {
             BusReadFrom::CpuRam => self.cpu_ram[real_addr as usize],
-            BusReadFrom::ProgramCounter => {
-                if real_addr == 0xFFFC {
-                    (self.program_start & 0xFF) as u8
-                } else if real_addr == 0xFFFD {
-                    (self.program_start >> 8) as u8
-                } else {
-                    0
-                }
-            },
             BusReadFrom::CartridgeProgramRom => self.cartridge.program_rom[real_addr as usize],
         }
     }
@@ -96,15 +83,6 @@ impl Mem for Bus {
         let (write_to, real_addr) = Bus::match_address(addr);
         match write_to {
             BusReadFrom::CpuRam => {self.cpu_ram[real_addr as usize] = data;},
-            BusReadFrom::ProgramCounter => { // honestly... this is not possible, but a nice workaround to allow the cpu test to remain unchanged for now
-                if real_addr == 0xFFFC {
-                    self.program_start = (self.program_start & 0xFF00) + (data as u16);
-                } else if real_addr == 0xFFFD {
-                    self.program_start = (self.program_start & 0x00FF) + ((data as u16) << 8);
-                } else {
-                    panic!("Invalid bus write mode!")
-                }
-            },
             BusReadFrom::CartridgeProgramRom => {
                 panic!("Write to cartridge rom detected!")
             }

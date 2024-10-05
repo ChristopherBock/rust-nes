@@ -123,7 +123,8 @@ impl Cartridge {
             return Err("File does not seem to be in the correct format".to_string());
         }
 
-        let parsed_signature = u32::from_le_bytes(raw_data[..4].try_into().unwrap_or([0, 0, 0, 0]));
+        // here we need to parse from big endian bytes, because it's a left to right string
+        let parsed_signature = u32::from_be_bytes(raw_data[..4].try_into().unwrap_or([0, 0, 0, 0]));
         if parsed_signature != NES_SIGNATURE {
             return Err(format!("Rom signature is not correct, I read {:x}!", parsed_signature));
         }
@@ -148,7 +149,7 @@ impl Cartridge {
 
 pub fn create_test_cartridge(dummy_trainer_data: bool) -> Cartridge {
     let mut raw_data = Vec::new();
-    raw_data.extend_from_slice(&NES_SIGNATURE.to_le_bytes());
+    raw_data.extend_from_slice(&NES_SIGNATURE.to_be_bytes());
 
     let mut flags_6 = Flags6::from_bits(0b0000_0000).unwrap();
     let flags_7 = Flags7::from_bits(0b0000_0000).unwrap();
