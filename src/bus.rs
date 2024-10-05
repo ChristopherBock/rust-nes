@@ -1,4 +1,5 @@
 use crate::mem::Mem;
+use crate::cartridge::Cartridge;
 
 /*
 NES memory map illustrated using ChatGPT 4o
@@ -27,27 +28,43 @@ NES memory map illustrated using ChatGPT 4o
 const RAM_START: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
 
+const CARTRIDGE_START: u16 = 0x8000;
+const PROGRAM_START_ADDRESS: u16 = 0xFFFC;
+const PROGRAM_START_END_ADDRESS: u16 = 0xFFFE;
+
+#[derive(Debug, PartialEq)]
+enum BusReadFrom {
+    CpuRam,
+    CartridgeProgramRom,
+    ProgramCounter,
+}
+
 pub struct Bus {
     cpu_ram: [u8; 0x0800],
     program_start: u16, // this is a workaround until ROM loading is implemented
+    cartridge: Cartridge,
 }
 
 impl Bus {
-    pub fn new() -> Self {
+    pub fn new(cartridge: Cartridge) -> Self {
         Bus {
             cpu_ram: [0; 0x0800],
             program_start: 0,
+            cartridge
         }
     }
 
-    fn match_address(addr: u16) -> u16 {
+    fn match_address(addr: u16) -> (BusReadFrom, u16) {
         match addr {
             RAM_START .. RAM_MIRRORS_END => {
                 let real_addr = addr & 0b0000_0111_1111_1111;
-                real_addr
+                (BusReadFrom::CpuRam, real_addr)
             },
-            0xFFFC..0xFFFE => {
-                addr
+            CARTRIDGE_START .. PROGRAM_START_ADDRESS => {
+                (BusReadFrom::CartridgeProgramRom, addr - CARTRIDGE_START)
+            },
+            PROGRAM_START_ADDRESS..PROGRAM_START_END_ADDRESS => {
+                (BusReadFrom::ProgramCounter, addr)
             },
             _ => {
                 println!("Read at {:x} not yet implemented", addr);
@@ -59,24 +76,38 @@ impl Bus {
 
 impl Mem for Bus {
     fn mem_read(&self, addr: u16) -> u8 {
-        let real_addr = Bus::match_address(addr);
-        if real_addr == 0xFFFC {
-            (self.program_start & 0xFF) as u8
-        } else if real_addr == 0xFFFD {
-            (self.program_start >> 8) as u8
-        } else {
-            self.cpu_ram[real_addr as usize]
+        let (read_from, real_addr) = Bus::match_address(addr);
+        match read_from {
+            BusReadFrom::CpuRam => self.cpu_ram[real_addr as usize],
+            BusReadFrom::ProgramCounter => {
+                if real_addr == 0xFFFC {
+                    (self.program_start & 0xFF) as u8
+                } else if real_addr == 0xFFFD {
+                    (self.program_start >> 8) as u8
+                } else {
+                    0
+                }
+            },
+            BusReadFrom::CartridgeProgramRom => self.cartridge.program_rom[real_addr as usize],
         }
     }
 
     fn mem_write(&mut self, addr: u16, data: u8) {
-        let real_addr = Bus::match_address(addr);
-        if real_addr == 0xFFFC {
-            self.program_start = (self.program_start & 0xFF00) + (data as u16);
-        } else if real_addr == 0xFFFD {
-            self.program_start = (self.program_start & 0x00FF) + ((data as u16) << 8);
-        } else {
-            self.cpu_ram[real_addr as usize] = data;
+        let (write_to, real_addr) = Bus::match_address(addr);
+        match write_to {
+            BusReadFrom::CpuRam => {self.cpu_ram[real_addr as usize] = data;},
+            BusReadFrom::ProgramCounter => { // honestly... this is not possible, but a nice workaround to allow the cpu test to remain unchanged for now
+                if real_addr == 0xFFFC {
+                    self.program_start = (self.program_start & 0xFF00) + (data as u16);
+                } else if real_addr == 0xFFFD {
+                    self.program_start = (self.program_start & 0x00FF) + ((data as u16) << 8);
+                } else {
+                    panic!("Invalid bus write mode!")
+                }
+            },
+            BusReadFrom::CartridgeProgramRom => {
+                panic!("Write to cartridge rom detected!")
+            }
         }
     }
 }

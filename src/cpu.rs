@@ -85,7 +85,7 @@ The NES CPU uses little endian addressing: least significant bits first
  -> real adress 0x8000 is stored as 0x00 0x80
  */
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU {
             register_a: 0,
             register_s: 0,
@@ -96,7 +96,7 @@ impl CPU {
             last_mem_write_address: 0,
             last_mem_write_value: 0,
             last_mem_write_value_u16: 0,
-            bus: Bus::new(),
+            bus,
         }
     }
 

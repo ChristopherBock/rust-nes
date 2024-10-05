@@ -5,8 +5,18 @@ mod test {
 
     use rand::Rng;
 
+    use crate::bus::Bus;
     use crate::cpu::CPU;
     use crate::cpu::AddressingMode;
+    use crate::mem::Mem;
+    use crate::cartridge::create_test_cartridge;
+
+    fn create_new_cpu() -> CPU {
+        let cartridge = create_test_cartridge(false);
+        let bus = Bus::new(cartridge);
+
+        CPU::new(bus)
+    }
 
     macro_rules! hashmap {
         ($( $key:expr => $value:expr ), * $(,)?) => {
@@ -91,13 +101,13 @@ mod test {
     0xea, 0xca, 0xd0, 0xfb, 0x60
 ];
 
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.interpret(game_code);
     }
 
     #[test]
     fn test_sta_and_lda_from_memory() {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.interpret(vec![0xa9, 0x07, 0x8D, 0x00, 0x00, 0xa9, 0x02, 0xAE, 0x00, 0x00, 0x00]);
 
         assert_eq!(cpu.register_a, 0x02);
@@ -106,7 +116,7 @@ mod test {
 
     #[test]
     fn test_inx_overflow() {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.register_x = 0xff;
         cpu.interpret(vec![0xa9, 0xff, 0xaa, 0xe8, 0xe8, 0x00]);
         
@@ -214,7 +224,7 @@ mod test {
     // todo: this is shakey, since the random numbers might have the very same bit patterns
     #[test]
     fn test_and () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -234,7 +244,7 @@ mod test {
 
     #[test]
     fn test_adc() {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
 
         macro_rules! adc_test_cases {
             ( $( $base:expr, $instructions:expr, $result:expr, $additional_setup:block), * $(,)?) => {
@@ -274,7 +284,7 @@ mod test {
 
     #[test]
     fn test_asl () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -308,7 +318,7 @@ mod test {
 
     #[test]
     fn test_bcs () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.interpret_without_reset(vec![0xB0, 0x01, 0x00, 0xE8, 0x00], 0x00);
 
@@ -325,7 +335,7 @@ mod test {
 
     #[test]
     fn test_bcc () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.interpret_without_reset(vec![0x90, 0x01, 0x00, 0xE8, 0x00], 0x00);
 
@@ -342,7 +352,7 @@ mod test {
 
     #[test]
     fn test_beq () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.interpret_without_reset(vec![0xF0, 0x01, 0x00, 0xE8, 0x00], 0x00);
 
@@ -367,7 +377,7 @@ mod test {
 
     #[test]
     fn test_bit () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0x24, &AddressingMode::ZeroPage, 0b0001_0010, {cpu.register_a = 0b0001_0010;}, {
@@ -387,7 +397,7 @@ mod test {
 
     #[test]
     fn test_bmi () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.status = 0b1000_0000;
         cpu.interpret_without_reset(vec![0x30, 0x01, 0x00, 0xE8, 0x00], 0x00);
@@ -404,7 +414,7 @@ mod test {
 
     #[test]
     fn test_bne () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.interpret_without_reset(vec![0xD0, 0x01, 0x00, 0xE8, 0x00], 0x00);
 
@@ -427,7 +437,7 @@ mod test {
 
     #[test]
     fn test_bpl () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.interpret_without_reset(vec![0x10, 0x01, 0x00, 0xE8, 0x00], 0x00);
 
@@ -444,7 +454,7 @@ mod test {
 
     #[test]
     fn test_bvc () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.interpret_without_reset(vec![0x50, 0x01, 0x00, 0xE8, 0x00], 0x00);
 
@@ -461,7 +471,7 @@ mod test {
 
     #[test]
     fn test_bvs () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.reset();
         cpu.status = 0b0100_0000;
         cpu.interpret_without_reset(vec![0x70, 0x01, 0x00, 0xE8, 0x00], 0x00);
@@ -478,7 +488,7 @@ mod test {
 
     #[test]
     fn test_clc_and_sec () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0x18, &AddressingMode::NoneAddressing, 0b0000_0001, {cpu.status = 0b0000_0001; check_carry_flag(&cpu, true);}, check_carry_flag(&cpu, false), 0,
@@ -488,7 +498,7 @@ mod test {
 
     #[test]
     fn test_cld_and_sed () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0xD8, &AddressingMode::NoneAddressing, 0b0000_1000, {cpu.status = 0b0000_1000; check_decimal_flag(&cpu, true);}, check_decimal_flag(&cpu, false), 0,
@@ -498,7 +508,7 @@ mod test {
 
     #[test]
     fn test_cli_and_sei () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0x58, &AddressingMode::NoneAddressing, 0b0000_0100, {cpu.status = 0b0000_0100; check_interrupt_disable_flag(&cpu, true);}, check_interrupt_disable_flag(&cpu, false), 0,
@@ -508,7 +518,7 @@ mod test {
 
     #[test]
     fn test_clv () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0xB8, &AddressingMode::NoneAddressing, 0b0100_0000, {cpu.status = 0b0100_0000; check_overflow_flag(&cpu, true);}, check_overflow_flag(&cpu, false), 0,
@@ -517,7 +527,7 @@ mod test {
 
     #[test]
     fn test_cmp () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -558,8 +568,30 @@ mod test {
     }
 
     #[test]
+    fn test_cpu_ram_mirroring() {
+        let mut  cpu = create_new_cpu();
+
+        cpu.interpret(vec![0xEA, 0xEA, 0xEA, 0xEA, 0x00]);
+        assert_eq!(cpu.program_counter, 0x0605);
+        assert_eq!(cpu.register_s, 0xFD);
+        assert_eq!(cpu.register_a, 0x00);
+        assert_eq!(cpu.register_x, 0x00);
+        assert_eq!(cpu.register_y, 0x00);
+
+        let first_page = cpu.mem_read(0x0601);
+        let second_page = cpu.mem_read(0x0E01);
+        let third_page = cpu.mem_read(0x1601);
+        let fourth_page = cpu.mem_read(0x1E01);
+
+        assert_eq!(first_page, 0xEA);
+        assert_eq!(first_page, second_page);
+        assert_eq!(first_page, third_page);
+        assert_eq!(first_page, fourth_page);
+    }
+
+    #[test]
     fn test_cpx_cpy () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             // without carry set
@@ -608,7 +640,7 @@ mod test {
 
     #[test]
     fn test_dec () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -638,7 +670,7 @@ mod test {
 
     #[test]
     fn test_dex_and_dey () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0xCA, &AddressingMode::NoneAddressing, 0x23, {cpu.register_x = 0x23;}, assert_eq!(cpu.register_x, 0x22), 0,
@@ -664,7 +696,7 @@ mod test {
 
     #[test]
     fn test_eor () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -684,7 +716,7 @@ mod test {
 
     #[test]
     fn test_inx () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0xE8, &AddressingMode::NoneAddressing, 0x23, {cpu.register_x = 0x23;}, assert_eq!(cpu.register_x, 0x24), 0,
@@ -705,7 +737,7 @@ mod test {
 
     #[test]
     fn test_iny () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             0xC8, &AddressingMode::NoneAddressing, 0x23, {cpu.register_y = 0x23;}, assert_eq!(cpu.register_y, 0x24), 0,
@@ -726,7 +758,7 @@ mod test {
 
     #[test]
     fn test_inc () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 9 as u8;
         opcode_test_case!{
             cpu,
@@ -751,7 +783,7 @@ mod test {
 
     #[test]
     fn test_jmp () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
 
         cpu.interpret(vec![0x4C, 0x02, 0x11, 0x00, 0x00]);
         assert_eq!(cpu.program_counter, 0x1103);
@@ -761,7 +793,7 @@ mod test {
 
     #[test]
     fn test_jsr () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         cpu.interpret(vec![0x20, 0x02, 0x11, 0x00, 0x00]);
         assert_eq!(cpu.program_counter, 0x1103);
         assert_eq!(cpu.register_s, 0xFB);
@@ -774,7 +806,7 @@ mod test {
         ($test_name:ident, $cpu_target_register:ident, $opcode_map:expr) => {
             #[test]
             fn $test_name () {
-                let mut cpu = CPU::new();
+                let mut cpu = create_new_cpu();
                 let opcodes: HashMap<AddressingMode, u8> = $opcode_map;
 
                 // immediate mode loading of values [1, 127]
@@ -953,7 +985,7 @@ mod test {
 
     #[test]
     fn test_lsr () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 5 as u8;
         opcode_test_case!{
             cpu,
@@ -998,7 +1030,7 @@ mod test {
 
     #[test]
     fn test_nop() {
-        let mut  cpu = CPU::new();
+        let mut  cpu = create_new_cpu();
 
         cpu.interpret(vec![0xEA, 0xEA, 0xEA, 0xEA, 0x00]);
         assert_eq!(cpu.program_counter, 0x0605);
@@ -1010,7 +1042,7 @@ mod test {
 
     #[test]
     fn test_ora () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1030,7 +1062,7 @@ mod test {
 
     #[test]
     fn test_pha_php_pla_plp () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         opcode_test_case!{
             cpu,
             // without carry set
@@ -1059,7 +1091,7 @@ mod test {
 
     #[test]
     fn test_rol () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1110,7 +1142,7 @@ mod test {
 
     #[test]
     fn test_ror () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1166,7 +1198,7 @@ mod test {
 
     #[test]
     fn test_rts () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
 
         cpu.interpret(vec![0x20, 0x07, 0x06, 0x00, 0x02, 0x02, 0x02, 0x60, 0x02, 0x02]);
         assert_eq!(cpu.program_counter, 0x0604);
@@ -1175,7 +1207,7 @@ mod test {
 
     #[test]
     fn test_sbc () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1227,7 +1259,7 @@ mod test {
 
     #[test]
     fn test_slo () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1255,7 +1287,7 @@ mod test {
 
     #[test]
     fn test_sta () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1285,7 +1317,7 @@ mod test {
 
     #[test]
     fn test_stx_and_sty () {
-        let mut cpu = CPU::new();
+        let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
         opcode_test_case!{
             cpu,
@@ -1315,7 +1347,7 @@ mod test {
         ($test_name:ident, $cpu_source_register:ident, $cpu_target_register:ident, $opcode:expr, $status_affected:expr) => {
             #[test]
             fn $test_name() {
-                let mut cpu = CPU::new();
+                let mut cpu = create_new_cpu();
                 cpu.$cpu_source_register = 0x13;
                 cpu.interpret_without_reset(vec![$opcode, 0x00], 0x00);
                 assert_eq!(cpu.$cpu_target_register, 0x13);
