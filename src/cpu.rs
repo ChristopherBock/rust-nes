@@ -16,6 +16,7 @@ use crate::bus::Bus;
 const STACK_START: u16 = 0x0100;
 const STACK_SIZE: u16 = 0x0100;
 const STACK_RESET: u8 = 0xFD;
+const STATUS_RESET: u8 = 0b0010_0100;
 
 pub struct CPU {
     pub register_a: u8,
@@ -26,6 +27,8 @@ pub struct CPU {
     pub register_s: u8,
     pub register_x: u8,
     pub register_y: u8,
+    // additional info on the status register:
+    // https://www.nesdev.org/wiki/Status_flags
     // 7   6   5   4   3   2   1   0
     // N   V   -   B   D   I   Z   C
     pub status: u8,
@@ -118,7 +121,7 @@ impl CPU {
             self.reset();
         }
 
-        self.run(|cpu|{});
+        self.run(|_, _|{});
     }
 
     pub fn load (&mut self, program: Vec<u8>, program_base_address: u16) {
@@ -137,7 +140,7 @@ impl CPU {
         self.last_mem_write_value_u16 = 0;
         self.last_mem_write_address = 0;
 
-        self.status = 0;
+        self.status = STATUS_RESET;
 
         for i in STACK_START..(STACK_SIZE+STACK_START) {
             self.mem_write(i, 0);
@@ -152,23 +155,22 @@ impl CPU {
 
     pub fn run<F> (&mut self, mut callback: F)
     where 
-        F: FnMut(&mut CPU),
+        F: FnMut(&mut CPU, &&opcodes::OpCode),
     {
         let ref opcodes = *opcodes::OPCODES_MAP;
 
         loop {
-            callback(self);
-
             let code = self.mem_read(self.program_counter);
-            self.program_counter += 1;
 
-            let program_counter_state = self.program_counter;
-
-            println!("Program counter 0x{:x}, OpCode 0x{:x}, Status {}", self.program_counter, code, self.status);
             let opcode = opcodes.get(&code).expect(
                 &format!("OpCode {:x} is not recognized!", code)
             );
-            println!(" -> OpCode name {}", opcode.name);
+
+            callback(self, opcode);
+
+            self.program_counter += 1;
+
+            let program_counter_state = self.program_counter;
 
             match code {
                 0x61 | 0x65 | 0x69 | 0x6D | 0x71 | 0x75 | 0x79 | 0x7D => {
@@ -316,7 +318,7 @@ impl CPU {
     }
 
     fn pop_stack(&mut self) -> u8 {
-        let value = self.mem_read((self.register_s) as u16 + 0x0100);
+        let value = self.mem_read((self.register_s + 1) as u16 + 0x0100);
         self.register_s = self.register_s.wrapping_add(1);
 
         value
@@ -338,6 +340,12 @@ impl CPU {
 
         self.register_a = (result & 0xff) as u8;
         self.set_neg_and_zero_flag(self.register_a);
+
+        if (value > self.register_a) & (result < 0x80) {
+            self.set_overflow_flag();
+        } else {
+            self.clear_overflow_flag();
+        }
     }
 
     fn and (&mut self, mode: &AddressingMode) {
@@ -384,6 +392,8 @@ impl CPU {
 
         if result == 0 {
             self.set_zero_flag();
+        } else {
+            self.clear_zero_flag();
         }
 
         self.status = self.status & 0b0011_1111;
@@ -580,7 +590,8 @@ impl CPU {
     }
 
     fn php (&mut self) {
-        self.push_stack(self.status);
+        let status = self.status | 0b0011_0000;
+        self.push_stack(status);
     }
 
     fn pla (&mut self) {
@@ -589,7 +600,7 @@ impl CPU {
     }
 
     fn plp (&mut self) {
-        self.status = self.pop_stack();
+        self.status = (self.pop_stack() & 0b1110_1111) | 0b0010_0000;
     }
 
     fn rol (&mut self, mode: &AddressingMode) {
@@ -676,6 +687,8 @@ impl CPU {
         // Todo: verify this against other implementations
         if (value > self.register_a) & (result < 0x80) {
             self.set_overflow_flag();
+        }  else {
+            self.clear_overflow_flag();
         }
 
         self.register_a = result;
@@ -871,16 +884,16 @@ impl CPU {
     fn set_neg_and_zero_flag(&mut self, result_value: u8) {
         // this sets the 0 flag in case register_a is 0
         if result_value == 0 {
-            self.set_zero_flag()
+            self.set_zero_flag();
         } else {
-            self.status = self.status & 0b1111_1101;
+            self.clear_zero_flag();
         }
 
         // this sets the negative flag in case bit 7 is 1
         if result_value & 0b1000_0000 != 0 {
-            self.set_neg_flag()
+            self.set_neg_flag();
         } else {
-            self.status = self.status & 0b0111_1111;
+            self.clear_neg_flag();
         }
     }
 
@@ -888,7 +901,7 @@ impl CPU {
         let result = value << 1;
         if value & 0b1000_0000 == 0b1000_0000 {
             self.set_carry();
-        }
+        } // shoudlnt't it be unset in the else case?
         result
     }
 
@@ -900,49 +913,52 @@ impl CPU {
         self.status = self.status & 0b1111_1011;
     }
 
-    fn get_operand_address (&self, mode: &AddressingMode) -> u16 {
+    pub fn get_absolute_address (&self, mode: &AddressingMode, address: u16) -> u16 {
         match mode {
-
-            // use the value right after the opcode
-            AddressingMode::Immediate => self.program_counter,
-
-            AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
+            AddressingMode::Absolute => self.mem_read_u16(address),
             AddressingMode::AbsoluteX => {
-                let base_address = self.mem_read_u16(self.program_counter);
+                let base_address = self.mem_read_u16(address);
                 base_address.wrapping_add(self.register_x as u16)
             },
             AddressingMode::AbsoluteY => {
-                let base_address = self.mem_read_u16(self.program_counter);
+                let base_address = self.mem_read_u16(address);
                 base_address.wrapping_add(self.register_y as u16)
             },
-
-            AddressingMode::Indirect => self.mem_read_u16(self.mem_read_u16(self.program_counter)),
+            AddressingMode::Indirect => self.mem_read_u16(self.mem_read_u16(address)),
             AddressingMode::IndirectX => {
-                let address = self.mem_read(self.program_counter);
+                let base_address = self.mem_read(address);
                 // documentation is unclear on how a value of $FF would be handled, whether it
                 // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
-                self.mem_read_u16((address as u16) + (self.register_x as u16))
+                self.mem_read_u16((base_address as u16) + (self.register_x as u16))
             },
             AddressingMode::IndirectY => {
-                let address = self.mem_read(self.program_counter) as u16;
+                let base_address = self.mem_read(address) as u16;
                 // documentation is unclear on how a value of $FF would be handled, whether it
                 // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
-                self.mem_read_u16(address) + self.register_y as u16
+                self.mem_read_u16(base_address) + self.register_y as u16
             },
-
-            AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
+            AddressingMode::ZeroPage => self.mem_read(address) as u16,
             AddressingMode::ZeroPageX => {
-                let address = self.mem_read(self.program_counter);
-                address.wrapping_add(self.register_x) as u16
+                let base_address = self.mem_read(address);
+                base_address.wrapping_add(self.register_x) as u16
             },
             AddressingMode::ZeroPageY => {
-                let address = self.mem_read(self.program_counter);
-                address.wrapping_add(self.register_y) as u16
+                let base_address = self.mem_read(address);
+                base_address.wrapping_add(self.register_y) as u16
             },
-
-            AddressingMode::NoneAddressing => {
+            AddressingMode::NoneAddressing | AddressingMode::Immediate  => {
                 panic!("mode {:?} is not supported", mode);
             },
+        }
+    }
+
+    fn get_operand_address (&self, mode: &AddressingMode) -> u16 {
+        match mode {
+            // use the value right after the opcode
+            AddressingMode::Immediate | AddressingMode::NoneAddressing => self.program_counter,
+
+            // for all other cases parsing is more complicated
+            _ => self.get_absolute_address(mode, self.program_counter)
         }
     }
 

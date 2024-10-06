@@ -62,30 +62,30 @@ lazy_static! {
         OpCode::new(0x1E, "ASL", 3, 7, AddressingMode::AbsoluteX),
 
         // in case of a page crossing 0xF0 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0x90, "BCC", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x90, "BCC", 2, 2, AddressingMode::NoneAddressing),
 
         // in case of a page crossing 0xF0 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0xB0, "BCS", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xB0, "BCS", 2, 2, AddressingMode::NoneAddressing),
 
         // in case of a page crossing 0xF0 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0xF0, "BEQ", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xF0, "BEQ", 2, 2, AddressingMode::NoneAddressing),
 
         OpCode::new(0x24, "BIT", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x2C, "BIT", 3, 4, AddressingMode::Absolute),
 
         // in case of a page crossing 0x30 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0x30, "BMI", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x30, "BMI", 2, 2, AddressingMode::NoneAddressing),
 
         // in case of a page crossing 0xD0 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0xD0, "BNE", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xD0, "BNE", 2, 2, AddressingMode::NoneAddressing),
 
         // in case of a page crossing 0x10 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0x10, "BPL", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x10, "BPL", 2, 2, AddressingMode::NoneAddressing),
 
         // in case of a page crossing 0x50 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0x50, "BVC", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x50, "BVC", 2, 2, AddressingMode::NoneAddressing),
         // in case of a page crossing 0x70 is two cycles longer, 1 cycle longer of branch succeeds
-        OpCode::new(0x70, "BVS", 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x70, "BVS", 2, 2, AddressingMode::NoneAddressing),
 
         OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
 
