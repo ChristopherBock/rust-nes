@@ -53,14 +53,18 @@ impl Bus {
         }
     }
 
-    fn match_address(addr: u16) -> (BusReadFrom, u16) {
+    fn match_address(addr: u16, program_rom_mirrored: bool) -> (BusReadFrom, u16) {
         match addr {
             RAM_START .. RAM_MIRRORS_END => {
                 let real_addr = addr & 0b0000_0111_1111_1111;
                 (BusReadFrom::CpuRam, real_addr)
             },
             CARTRIDGE_START .. PROGRAM_START_END_ADDRESS => {
-                (BusReadFrom::CartridgeProgramRom, addr - CARTRIDGE_START)
+                let mut real_addr = addr - CARTRIDGE_START;
+                if program_rom_mirrored && real_addr >= 0x4000{
+                    real_addr = real_addr - 0x4000;
+                }
+                (BusReadFrom::CartridgeProgramRom, real_addr)
             },
             _ => {
                 println!("Read at {:x} not yet implemented", addr);
@@ -72,7 +76,7 @@ impl Bus {
 
 impl Mem for Bus {
     fn mem_read(&self, addr: u16) -> u8 {
-        let (read_from, real_addr) = Bus::match_address(addr);
+        let (read_from, real_addr) = Bus::match_address(addr, self.cartridge.is_program_rom_mirrored);
         match read_from {
             BusReadFrom::CpuRam => self.cpu_ram[real_addr as usize],
             BusReadFrom::CartridgeProgramRom => self.cartridge.program_rom[real_addr as usize],
@@ -80,7 +84,7 @@ impl Mem for Bus {
     }
 
     fn mem_write(&mut self, addr: u16, data: u8) {
-        let (write_to, real_addr) = Bus::match_address(addr);
+        let (write_to, real_addr) = Bus::match_address(addr, self.cartridge.is_program_rom_mirrored);
         match write_to {
             BusReadFrom::CpuRam => {self.cpu_ram[real_addr as usize] = data;},
             BusReadFrom::CartridgeProgramRom => {

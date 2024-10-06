@@ -51,7 +51,7 @@ const CHARACTER_ROM_PAGE_SIZE: usize = 0x2000;
 
  */
 bitflags::bitflags! {
-    struct Flags6 : u8 {
+    pub struct Flags6 : u8 {
         const VerticalMirroring = 0b0000_0001;
         const BatteryBacke = 0b0000_0010;
         const TrainerData = 0b0000_0100;
@@ -91,7 +91,7 @@ bitflags::bitflags! {
 +-------+---------------------------------------------------+
  */
 bitflags::bitflags! {
-    struct Flags7 : u8 {
+    pub struct Flags7 : u8 {
         const Unused = 0b0000_0001;
         const iNES2Format = 0b0000_0010;
         const PlayChoice = 0b0000_0100;
@@ -113,8 +113,9 @@ pub enum Mirroring {
 pub struct Cartridge {
     pub program_rom: Vec<u8>,
     pub character_rom: Vec<u8>,
-    flags_6: Flags6,
-    flags_7: Flags7,
+    pub flags_6: Flags6,
+    pub flags_7: Flags7,
+    pub is_program_rom_mirrored: bool,
 }
 
 impl Cartridge {
@@ -143,6 +144,7 @@ impl Cartridge {
             character_rom: raw_data[character_rom_start .. (character_rom_start + character_rom_size)].to_vec(),
             flags_6,
             flags_7,
+            is_program_rom_mirrored: raw_data[4] == 1
         })
     }
 }
