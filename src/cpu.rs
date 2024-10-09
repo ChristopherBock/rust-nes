@@ -9,6 +9,8 @@ ToDo:
 Move to bitflags: https://docs.rs/bitflags/latest/bitflags/
  */
 
+use std::result;
+
 use crate::opcodes;
 use crate::mem::Mem;
 use crate::bus::Bus;
@@ -325,27 +327,38 @@ impl CPU {
     }
 
     /*
-        OP Codes
+        Operation helpers
      */
-    fn adc (&mut self, mode: &AddressingMode) {
-        let address = self.get_operand_address(mode);
-        let value = self.mem_read(address);
-        let result = value as u16 + (self.status & 0b0000_0001) as u16 + self.register_a as u16;
 
-        if result > 0xff {
+    fn add_to_register_a_with_carry(&mut self, value: u8, carry: u8) {
+        let result_u16 = value as u16 + self.register_a as u16 + carry as u16;
+
+        if result_u16 > 0xFF {
             self.set_carry();
         } else {
             self.clear_carry();
         }
 
-        self.register_a = (result & 0xff) as u8;
-        self.set_neg_and_zero_flag(self.register_a);
-
-        if (value > self.register_a) & (result < 0x80) {
+        let result = result_u16 as u8;
+        // check if there is a mathematical overflow due to type length
+        if (value ^ result) & (result ^ self.register_a) & 0x80 != 0 {
             self.set_overflow_flag();
         } else {
             self.clear_overflow_flag();
         }
+
+        self.register_a = result as u8;
+        self.set_neg_and_zero_flag(self.register_a);
+    }
+
+    /*
+        OP Codes
+     */
+    fn adc (&mut self, mode: &AddressingMode) {
+        let address = self.get_operand_address(mode);
+        let value = self.mem_read(address);
+
+        self.add_to_register_a_with_carry(value, self.status & 0b0000_0001);
     }
 
     fn and (&mut self, mode: &AddressingMode) {
@@ -526,7 +539,7 @@ impl CPU {
     }
 
     fn jsr (&mut self, mode: &AddressingMode) {
-        let return_address = self.program_counter + 2;
+        let return_address = self.program_counter + 1;
         self.push_stack_u16(return_address);
 
         self.jmp(mode)
@@ -658,40 +671,20 @@ impl CPU {
 
     fn rts (&mut self) {
         let return_address = self.pop_stack_u16();
-        self.program_counter = return_address;
+        self.program_counter = return_address + 1;
     }
 
+    // sbc: A - M - (1 - C)
+    // sbc uses two complement arithmetic
+    // therefore we build the two complement of the number to be subtracted
+    // the two complement is built by inverting all bits and adding 1 to
+    // the result, this one cancels with the one from the (1- C) term
     fn sbc (&mut self, mode: &AddressingMode) {
         let address = self.get_operand_address(mode);
-        let value = self.mem_read(address);
+        let value = !self.mem_read(address);
 
-        let result = self.register_a.wrapping_sub(value).wrapping_sub(1 - (self.status & 0b0000_0001));
-
-        self.set_neg_and_zero_flag(result);
-
-        // Todo: verify this against other implementations
-        if self.is_carry_flag_set() {
-            if self.register_a < value {
-                self.clear_carry();
-            } else {
-                self.set_carry();
-            }
-        } else {
-            if self.register_a <= value {
-                self.clear_carry();
-            } else {
-                self.set_carry();
-            }
-        }
-
-        // Todo: verify this against other implementations
-        if (value > self.register_a) & (result < 0x80) {
-            self.set_overflow_flag();
-        }  else {
-            self.clear_overflow_flag();
-        }
-
-        self.register_a = result;
+        let carry = self.status & 0b0000_0001;
+        self.add_to_register_a_with_carry(value, carry);
     }
 
     fn sec (&mut self) {
@@ -826,7 +819,7 @@ impl CPU {
             self.clear_zero_flag();
         }
 
-        if reference < value{
+        if (reference.wrapping_sub(value) & 0b1000_0000) > 0 {
             self.set_neg_flag();
         } else {
             self.clear_neg_flag();
@@ -901,7 +894,9 @@ impl CPU {
         let result = value << 1;
         if value & 0b1000_0000 == 0b1000_0000 {
             self.set_carry();
-        } // shoudlnt't it be unset in the else case?
+        } else {
+            self.clear_carry();
+        }
         result
     }
 
@@ -926,16 +921,21 @@ impl CPU {
             },
             AddressingMode::Indirect => self.mem_read_u16(self.mem_read_u16(address)),
             AddressingMode::IndirectX => {
+                let base_address = self.mem_read(address).wrapping_add(self.register_x);
+                // documentation is unclear on how a value of $FF would be handled, whether it
+                // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
+                let lo = self.mem_read(base_address as u16);
+                let hi = self.mem_read(base_address.wrapping_add(1) as u16);
+                (lo as u16) + ((hi as u16) << 8)
+            },
+            AddressingMode::IndirectY => {
                 let base_address = self.mem_read(address);
                 // documentation is unclear on how a value of $FF would be handled, whether it
                 // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
-                self.mem_read_u16((base_address as u16) + (self.register_x as u16))
-            },
-            AddressingMode::IndirectY => {
-                let base_address = self.mem_read(address) as u16;
-                // documentation is unclear on how a value of $FF would be handled, whether it
-                // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
-                self.mem_read_u16(base_address) + self.register_y as u16
+                let lo = self.mem_read(base_address as u16);
+                let hi = self.mem_read(base_address.wrapping_add(1) as u16);
+                let indirect_address = (lo as u16) + ((hi as u16) << 8);
+                indirect_address.wrapping_add(self.register_y as u16)
             },
             AddressingMode::ZeroPage => self.mem_read(address) as u16,
             AddressingMode::ZeroPageX => {

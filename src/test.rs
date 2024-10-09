@@ -853,7 +853,7 @@ mod test {
         assert_eq!(cpu.program_counter, 0x1103);
         assert_eq!(cpu.register_s, 0xFB);
         assert_eq!(cpu.last_mem_write_address, 0x01FC); // check if it pushed something to the stack
-        assert_eq!(cpu.last_mem_write_value_u16, 0x0603);
+        assert_eq!(cpu.last_mem_write_value_u16, 0x0602);
     }
 
     // load into register opcode tests
@@ -1250,7 +1250,13 @@ mod test {
 
     #[test]
     fn test_rti () {
-        todo!()
+        let mut cpu = create_new_cpu();
+
+        // we push 0x0000 as return address to the stack and the status of 0x00
+        cpu.interpret(vec![0xA9, 0x00, 0x48, 0xA9, 0x00, 0x48, 0xA9, 0x00, 0x48, 0x40]);
+        assert_eq!(cpu.program_counter, 0x0001);
+        assert_eq!(cpu.register_s, 0xFD);
+        assert_eq!(cpu.status, 0b0010_0000);
     }
 
     #[test]
@@ -1298,9 +1304,9 @@ mod test {
                 check_carry_flag(&cpu, false);
                 check_overflow_flag(&cpu, false);
             }, 0,
-            0xE9, &AddressingMode::Immediate, 0xA1, {cpu.register_a = 0x10; cpu.status = 0b0000_0000;}, {
-                assert_eq!(cpu.register_a, 0x6E);
-                check_zero_and_neg_flags(&cpu, false, false);
+            0xE9, &AddressingMode::Immediate, 0xFF, {cpu.register_a = 0x7F; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.register_a, 0x80);
+                check_zero_and_neg_flags(&cpu, false, true);
                 check_carry_flag(&cpu, false);
                 check_overflow_flag(&cpu, true);
             }, 0,

@@ -67,13 +67,14 @@ fn parse_detailed_addressing_information(cpu: &CPU, opcode: &&OpCode) -> String 
             };
             match opcode.mode {
                 AddressingMode::ZeroPage => format!("= {:02x}", stored_value),
-                AddressingMode::Absolute => format!("= {:02x}", stored_value),
                 AddressingMode::ZeroPageX | AddressingMode::ZeroPageY => format!("@ {:02x} = {:02x}", real_address, stored_value),
                 AddressingMode::IndirectX => {
-                    format!("@ {:02x} = {:04x} = {:02x}", operand_value + cpu.register_x, real_address, stored_value)
+                    format!("@ {:02x} = {:04x} = {:02x}", operand_value.wrapping_add(cpu.register_x), real_address, stored_value)
                 },
                 AddressingMode::IndirectY => {
-                    let indirect_address = cpu.mem_read_u16(operand_value as u16);
+                    let lo = cpu.mem_read(operand_value as u16);
+                    let hi = cpu.mem_read(operand_value.wrapping_add(1) as u16);
+                    let indirect_address = (lo as u16) + ((hi as u16) << 8);
                     format!("= {:04x} @ {:04x} = {:02x}", indirect_address, real_address, stored_value)
                 },
                 _ => "".to_string()
@@ -87,9 +88,13 @@ fn parse_detailed_addressing_information(cpu: &CPU, opcode: &&OpCode) -> String 
                     (address, cpu.mem_read(address))
                 }
             };
-            match opcode.mode {
-                AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => format!("@ {:04x} = {:02x}", real_address, stored_value),
-                _ => "".to_string()
+            match opcode.code {
+                0x20 | 0x4C => "".to_string(),
+                _ => match opcode.mode {
+                    AddressingMode::Absolute => format!("= {:02x}", stored_value),
+                    AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => format!("@ {:04x} = {:02x}", real_address, stored_value),
+                    _ => "".to_string()
+                }
             }
         },
         _ => panic!("Unsupported opcode, cannot parse addressing information!")
