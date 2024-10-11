@@ -28,6 +28,9 @@ NES memory map illustrated using ChatGPT 4o
 const RAM_START: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
 
+const EXPANSION_REGISTERS_START: u16 = 0x4000;
+const EXPANSION_REGISTERS_END: u16 = 0x5FFF;
+
 const CARTRIDGE_START: u16 = 0x8000;
 const PROGRAM_START_ADDRESS: u16 = 0xFFFC;
 const PROGRAM_START_END_ADDRESS: u16 = 0xFFFE;
@@ -36,6 +39,7 @@ const PROGRAM_START_END_ADDRESS: u16 = 0xFFFE;
 enum BusReadFrom {
     CpuRam,
     CartridgeProgramRom,
+    Expansion,
 }
 
 pub struct Bus {
@@ -59,6 +63,10 @@ impl Bus {
                 let real_addr = addr & 0b0000_0111_1111_1111;
                 (BusReadFrom::CpuRam, real_addr)
             },
+            EXPANSION_REGISTERS_START .. EXPANSION_REGISTERS_END => {
+                let real_addr = addr;
+                (BusReadFrom::Expansion, real_addr)
+            }
             CARTRIDGE_START .. PROGRAM_START_END_ADDRESS => {
                 let mut real_addr = addr - CARTRIDGE_START;
                 if program_rom_mirrored && real_addr >= 0x4000{
@@ -80,6 +88,7 @@ impl Mem for Bus {
         match read_from {
             BusReadFrom::CpuRam => self.cpu_ram[real_addr as usize],
             BusReadFrom::CartridgeProgramRom => self.cartridge.program_rom[real_addr as usize],
+            BusReadFrom::Expansion => 0xFF,
         }
     }
 
@@ -89,6 +98,9 @@ impl Mem for Bus {
             BusReadFrom::CpuRam => {self.cpu_ram[real_addr as usize] = data;},
             BusReadFrom::CartridgeProgramRom => {
                 panic!("Write to cartridge rom detected!")
+            }
+            BusReadFrom::Expansion => {
+                // nop
             }
         }
     }

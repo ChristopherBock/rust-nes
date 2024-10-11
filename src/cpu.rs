@@ -9,8 +9,6 @@ ToDo:
 Move to bitflags: https://docs.rs/bitflags/latest/bitflags/
  */
 
-use std::result;
-
 use crate::opcodes;
 use crate::mem::Mem;
 use crate::bus::Bus;
@@ -24,7 +22,7 @@ pub struct CPU {
     pub register_a: u8,
     // pushes to the stack decrement the stack pointer
     // pulling from it increments it
-    // the stack is located between $0100 and $01FF
+    // the stack is located between  0x0100 and  0x01FF
     // register_s is the stack pointer
     pub register_s: u8,
     pub register_x: u8,
@@ -178,6 +176,9 @@ impl CPU {
                 0x61 | 0x65 | 0x69 | 0x6D | 0x71 | 0x75 | 0x79 | 0x7D => {
                     self.adc(&opcode.mode);
                 },
+                0x0B | 0x2B => {
+                    self.anc(&opcode.mode);
+                },
                 0x21 | 0x25 | 0x29 | 0x2D | 0x31 | 0x35 | 0x39 | 0x3D => {
                     self.and(&opcode.mode);
                 },
@@ -208,6 +209,7 @@ impl CPU {
                 0xC0 | 0xC4 | 0xCC => {
                     self.cpy(&opcode.mode);
                 },
+                0xC7| 0xD7| 0xCF| 0xDF| 0xDB| 0xC3| 0xD3 => self.dcp(&opcode.mode),
                 0xC6 | 0xCE | 0xD6 | 0xDE => {
                     self.dec(&opcode.mode);
                 },
@@ -221,12 +223,18 @@ impl CPU {
                 },
                 0xE8 => self.inx(),
                 0xC8 => self.iny(),
+                0xE7 | 0xF7 | 0xEF | 0xFF | 0xFB | 0xE3 | 0xF3 => {
+                    self.isb(&opcode.mode);
+                }
                 0x4C | 0x6C => {
                     self.jmp(&opcode.mode);
                 },
                 0x20 => {
                     self.jsr(&opcode.mode);
-                }
+                },
+                0xA7| 0xB7| 0xAF| 0xBF| 0xA3| 0xB3 => {
+                    self.lax(&opcode.mode);
+                },
                 0xA1 |0xA5 | 0xA9 | 0xAD | 0xB1 | 0xB5 | 0xB9 | 0xBD => {
                     self.lda(&opcode.mode);
                 },
@@ -239,7 +247,14 @@ impl CPU {
                 0x46 | 0x4A | 0x4E | 0x56 | 0x5E => {
                     self.lsr(&opcode.mode);
                 },
+                // the "normal nop"
                 0xEA => self.nop(),
+                // illegal nop opcodes
+                0x1A| 0x3A| 0x5A| 0x7A| 0xDA| 0xFA => self.nop(),
+                // the illegal opcode dops = double no operation
+                0x04| 0x14| 0x34| 0x44| 0x54| 0x64| 0x74| 0x80| 0x82| 0x89| 0xC2| 0xD4| 0xE2| 0xF4 => self.nop(),
+                // illegal top opcodes = triple no operation
+                0x0C| 0x1C| 0x3C| 0x5C| 0x7C| 0xDC| 0xFC => self.nop(),
                 0x01 | 0x05 | 0x09 | 0x0D | 0x11 | 0x15 | 0x19 | 0x1D => {
                     self.ora(&opcode.mode);
                 },
@@ -247,18 +262,28 @@ impl CPU {
                 0x08 => self.php(),
                 0x68 => self.pla(),
                 0x28 => self.plp(),
+                0x27 | 0x37 | 0x2F | 0x3F | 0x3B | 0x23 | 0x33 => {
+                    self.rla(&opcode.mode);
+                }
                 0x26 | 0x2A | 0x2E | 0x36 | 0x3E => {
                     self.rol(&opcode.mode);
                 },
                 0x66 | 0x6A | 0x6E | 0x76 | 0x7E => {
                     self.ror(&opcode.mode);
                 },
+                0x67 | 0x77 | 0x6F | 0x7F | 0x7B | 0x63 | 0x73 => {
+                    self.rra(&opcode.mode);
+                }
                 0x40 => {
                     self.rti();
                 },
                 0x60 => {
                     self.rts();
                 },
+                0x87 | 0x97 | 0x83 | 0x8F => {
+                    self.sax(&opcode.mode);
+                },
+                0xEB => self.sbc(&opcode.mode),
                 0xE1 | 0xE5 | 0xE9 | 0xED | 0xF1 | 0xF5 | 0xF9 | 0xFD => {
                     self.sbc(&opcode.mode);
                 }
@@ -274,6 +299,9 @@ impl CPU {
                 0x03 | 0x07 | 0x0F | 0x13 | 0x17 | 0x1B | 0x1F => {
                     self.slo(&opcode.mode);
                 },
+                0x47 | 0x57 | 0x4F | 0x5F | 0x5B | 0x43 | 0x53 => {
+                    self.sre(&opcode.mode);
+                }
                 0x81 | 0x85 | 0x8D | 0x91 | 0x95 | 0x99 | 0x9D => {
                     self.sta(&opcode.mode);
                 },
@@ -359,6 +387,21 @@ impl CPU {
         let value = self.mem_read(address);
 
         self.add_to_register_a_with_carry(value, self.status & 0b0000_0001);
+    }
+
+    fn anc (&mut self, mode: &AddressingMode) {
+        let address = self.get_operand_address(mode);
+        let value = self.mem_read(address);
+        let result = self.register_a & value;
+
+        self.register_a = result;
+        self.set_neg_and_zero_flag(result);
+
+        if self.is_neg_flag_set(){
+            self.set_carry();
+        } else {
+            self.clear_carry();
+        }
     }
 
     fn and (&mut self, mode: &AddressingMode) {
@@ -474,6 +517,14 @@ impl CPU {
         self.compare_and_set_flags(self.register_y, value);
     }
 
+    fn dcp (&mut self, mode: &AddressingMode) {
+        let address = self.get_operand_address(mode);
+        let value = self.mem_read(address).wrapping_sub(1);
+
+        self.mem_write(address, value);
+        self.compare_and_set_flags(self.register_a, value);
+    }
+
     fn dec (&mut self, mode: &AddressingMode) {
         let address = self.get_operand_address(mode);
         let value = self.mem_read(address);
@@ -528,6 +579,18 @@ impl CPU {
         self.set_neg_and_zero_flag(self.register_y);
     }
 
+    fn isb (&mut self, mode: &AddressingMode) {
+        let address = self.get_operand_address(mode);
+        let value = self.mem_read(address);
+
+        let value_incremented = value.wrapping_add(1);
+        let carry = self.status & 0b0000_0001;
+
+        self.mem_write(address, value_incremented);
+
+        self.add_to_register_a_with_carry(!value_incremented, carry);
+    }
+
     // jumps
     fn jmp (&mut self, mode: &AddressingMode) {
         // opposed to other instructions the operand specifies in absolute addressing mode the address to jump to, so where to find the next instructions
@@ -543,6 +606,13 @@ impl CPU {
         self.push_stack_u16(return_address);
 
         self.jmp(mode)
+    }
+
+    fn lax (&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.register_a = self.mem_read(addr);
+        self.register_x = self.register_a;
+        self.set_neg_and_zero_flag(self.register_a);
     }
 
     // ld* operations
@@ -616,6 +686,23 @@ impl CPU {
         self.status = (self.pop_stack() & 0b1110_1111) | 0b0010_0000;
     }
 
+    fn rla (&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        let roled_value = (value << 1) + (self.status & 0b0000_0001);
+        self.mem_write(addr, roled_value);
+
+        if (value & 0b1000_0000) > 0 {
+            self.set_carry();
+        } else {
+            self.clear_carry();
+        }
+
+        self.set_neg_and_zero_flag(roled_value);
+        self.register_a = self.register_a & roled_value;
+    }
+
     fn rol (&mut self, mode: &AddressingMode) {
         let mut value = self.register_a;
         let mut address = 0;
@@ -660,6 +747,24 @@ impl CPU {
         self.set_neg_and_zero_flag(result);
     }
 
+    fn rra (&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        let result = (value >> 1) + if self.is_carry_flag_set() {0x80} else {0x00};
+        self.mem_write(addr, result);
+
+        if (value & 0b0000_0001) > 0 {
+            self.set_carry();
+        } else {
+            self.clear_carry();
+        }
+
+        let carry: u8 = self.status & 0b0000_0001;
+
+        self.add_to_register_a_with_carry(result, carry);
+    }
+
     // jump and interrupt returns
 
     fn rti (&mut self) {
@@ -672,6 +777,13 @@ impl CPU {
     fn rts (&mut self) {
         let return_address = self.pop_stack_u16();
         self.program_counter = return_address + 1;
+    }
+
+    fn sax (&mut self, mode: &AddressingMode) {
+        let address = self.get_operand_address(mode);
+        let result = self.register_x & self.register_a;
+
+        self.mem_write(address, result);
     }
 
     // sbc: A - M - (1 - C)
@@ -709,9 +821,32 @@ impl CPU {
             self.clear_carry();
         }
 
-        let result = (value << 1) | self.register_a;
+        let shifted_value = value << 1;
+
+        self.mem_write(addr, shifted_value);
+
+        let result = shifted_value | self.register_a;
         self.register_a = result;
         self.set_neg_and_zero_flag(result);
+    }
+
+    fn sre (&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        let lsred_value = value >> 1;
+        self.mem_write(addr, lsred_value);
+
+        if (value & 0b0000_0001) > 0 {
+            self.set_carry();
+        } else {
+            self.clear_carry();
+        }
+
+        let xor_result = self.register_a ^ lsred_value;
+        self.set_neg_and_zero_flag(xor_result);
+
+        self.register_a = xor_result;
     }
 
     // st* operations
@@ -919,19 +1054,32 @@ impl CPU {
                 let base_address = self.mem_read_u16(address);
                 base_address.wrapping_add(self.register_y as u16)
             },
-            AddressingMode::Indirect => self.mem_read_u16(self.mem_read_u16(address)),
+            AddressingMode::Indirect => {
+                let indirect_read_address = self.mem_read_u16(address);
+
+                // in indirect mode, which only the jmp instruction uses the 6502 wraps around the lo byte
+                // the indirect addressing for the jmp instruction was implemented like this to save
+                // costs, transistors were costly at that time
+                let read_address_lo = indirect_read_address as u8;
+                let read_address_hi = indirect_read_address & 0xFF00;
+
+                let lo = self.mem_read(indirect_read_address);
+                let hi = self.mem_read(read_address_hi + (read_address_lo.wrapping_add(1) as u16));
+
+                (lo as u16) + ((hi as u16) << 8)
+            },
             AddressingMode::IndirectX => {
                 let base_address = self.mem_read(address).wrapping_add(self.register_x);
-                // documentation is unclear on how a value of $FF would be handled, whether it
-                // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
+                // documentation is unclear on how a value of  0xFF would be handled, whether it
+                // is a read from  0xFF and  0x0100 or whether it is a wrapped read from  0xFF and  0x00
                 let lo = self.mem_read(base_address as u16);
                 let hi = self.mem_read(base_address.wrapping_add(1) as u16);
                 (lo as u16) + ((hi as u16) << 8)
             },
             AddressingMode::IndirectY => {
                 let base_address = self.mem_read(address);
-                // documentation is unclear on how a value of $FF would be handled, whether it
-                // is a read from $FF and $0100 or whether it is a wrapped read from $FF and $00
+                // documentation is unclear on how a value of  0xFF would be handled, whether it
+                // is a read from  0xFF and  0x0100 or whether it is a wrapped read from  0xFF and  0x00
                 let lo = self.mem_read(base_address as u16);
                 let hi = self.mem_read(base_address.wrapping_add(1) as u16);
                 let indirect_address = (lo as u16) + ((hi as u16) << 8);

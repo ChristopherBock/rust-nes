@@ -298,6 +298,30 @@ mod test {
     }
 
     #[test]
+    fn test_anc () {
+        let mut cpu = create_new_cpu();
+        opcode_test_case!{
+            cpu,
+            0x0B, &AddressingMode::Immediate, 0b0101_0101, cpu.register_a = 0b0101, assert_eq!(cpu.register_a, 0b0101), 0,
+            0x0B, &AddressingMode::Immediate, 0b1101_0101, cpu.register_a = 0b0000_0101, {
+                assert_eq!(cpu.register_a, 0b0000_0101);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x2B, &AddressingMode::Immediate, 0b1101_0101, cpu.register_a = 0b1000_0101, {
+                assert_eq!(cpu.register_a, 0b1000_0101);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x2B, &AddressingMode::Immediate, 0b1010_0101, cpu.register_a = 0b0101_1011, {
+                assert_eq!(cpu.register_a, 0b0000_0001);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+        }
+    }
+
+    #[test]
     fn test_adc() {
         let mut cpu = create_new_cpu();
 
@@ -694,6 +718,39 @@ mod test {
     }
 
     #[test]
+    fn test_dcp () {
+        let mut cpu = create_new_cpu();
+        let xydeviation = 7 as u8;
+        opcode_test_case!{
+            cpu,
+            0xCF, &AddressingMode::Absolute, 0x43, {}, assert_eq!(cpu.last_mem_write_value, 0x42), 0,
+            0xC7, &AddressingMode::ZeroPage, 0x23, {}, assert_eq!(cpu.last_mem_write_value, 0x22), 0,
+            0xD7, &AddressingMode::ZeroPageX, 0x33, {cpu.register_x = xydeviation;}, assert_eq!(cpu.last_mem_write_value, 0x32), xydeviation,
+            0xDF, &AddressingMode::AbsoluteX, 0x44, {cpu.register_x = xydeviation;}, assert_eq!(cpu.last_mem_write_value, 0x43), xydeviation,
+            0xDB, &AddressingMode::AbsoluteY, 0x44, {cpu.register_y = xydeviation;}, assert_eq!(cpu.last_mem_write_value, 0x43), xydeviation,
+            0xC3, &AddressingMode::IndirectX, 0x44, {cpu.register_x = xydeviation;}, assert_eq!(cpu.last_mem_write_value, 0x43), xydeviation,
+            0xD3, &AddressingMode::IndirectY, 0x44, {cpu.register_y = xydeviation;}, assert_eq!(cpu.last_mem_write_value, 0x43), xydeviation,
+            // now test the flag setting
+            0xCF, &AddressingMode::Absolute, 0x01, {}, {
+                assert_eq!(cpu.last_mem_write_value, 0x00);
+                check_zero_and_neg_flags(&cpu, true, false);
+            }, 0,
+            0xCF, &AddressingMode::Absolute, 0x00, {}, {
+                assert_eq!(cpu.last_mem_write_value, 0xFF);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, 0,
+            0xCF, &AddressingMode::Absolute, 0x80, {}, {
+                assert_eq!(cpu.last_mem_write_value, 0x7F);
+                check_zero_and_neg_flags(&cpu, false, true);
+            }, 0,
+            0xCF, &AddressingMode::Absolute, 0x81, {}, {
+                assert_eq!(cpu.last_mem_write_value, 0x80);
+                check_zero_and_neg_flags(&cpu, false, true);
+            }, 0,
+        }
+    }
+
+    #[test]
     fn test_dec () {
         let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
@@ -837,6 +894,58 @@ mod test {
     }
 
     #[test]
+    fn test_isb () {
+        let mut cpu = create_new_cpu();
+        let xydeviation = 7 as u8;
+        opcode_test_case!{
+            cpu,
+            0xEF, &AddressingMode::Absolute, 0x23, cpu.register_a = 0x25, {
+                assert_eq!(cpu.register_a, 0x00);
+                check_zero_and_neg_flags(&cpu, true, false);
+                check_carry_flag(&cpu, true);
+                check_overflow_flag(&cpu, false);
+            }, 0,
+            0xEF, &AddressingMode::Absolute, 0x22, cpu.register_a = 0x23, {
+                assert_eq!(cpu.register_a, 0xFF);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+                check_overflow_flag(&cpu, false);
+            }, 0,
+            0xEF, &AddressingMode::Absolute, 0x20, { cpu.register_a = 0x23; cpu.status = 0b0000_0001; }, {
+                assert_eq!(cpu.register_a, 0x02);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, true);
+                check_overflow_flag(&cpu, false);
+            }, 0,
+            0xEF, &AddressingMode::Absolute, 0x23, {cpu.register_a = 0x23; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.register_a, 0xFF);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+                check_overflow_flag(&cpu, false);
+            }, 0,
+            0xEF, &AddressingMode::Absolute, 0x23, {cpu.register_a = 0x23; cpu.status = 0b0000_0000;}, {
+                assert_eq!(cpu.register_a, 0xFE);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+                check_overflow_flag(&cpu, false);
+            }, 0,
+            0xEF, &AddressingMode::Absolute, 0xFE, {cpu.register_a = 0x7F; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.register_a, 0x80);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+                check_overflow_flag(&cpu, true);
+            }, 0,
+            0xEF, &AddressingMode::Absolute, 0x22, cpu.register_a = 0x23, assert_eq!(cpu.register_a, 0xFF), 0,
+            0xFF, &AddressingMode::AbsoluteX, 0x02, {cpu.register_a = 0x23; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0x1F), xydeviation,
+            0xFB, &AddressingMode::AbsoluteY, 0x04, {cpu.register_a = 0x23; cpu.register_y = xydeviation;}, assert_eq!(cpu.register_a, 0x1D), xydeviation,
+            0xE7, &AddressingMode::ZeroPage, 0x20, cpu.register_a = 0x23, assert_eq!(cpu.register_a, 0x01), 0,
+            0xF7, &AddressingMode::ZeroPageX, 0x10, {cpu.register_a = 0x23; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0x11), xydeviation,
+            0xE3, &AddressingMode::IndirectX, 0x00, {cpu.register_a = 0x23; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0x21), xydeviation,
+            0xF3, &AddressingMode::IndirectY, 0x01, {cpu.register_a = 0x23; cpu.register_y = xydeviation;}, assert_eq!(cpu.register_a, 0x20), xydeviation,
+        }
+    }
+
+    #[test]
     fn test_jmp () {
         let mut cpu = create_new_cpu();
 
@@ -864,20 +973,22 @@ mod test {
                 let mut cpu = create_new_cpu();
                 let opcodes: HashMap<AddressingMode, u8> = $opcode_map;
 
-                // immediate mode loading of values [1, 127]
-                cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x07, 0x00]);
-                assert_eq!(cpu.$cpu_target_register, 0x07);
-                check_zero_and_neg_flags(&cpu, false, false);
+                if opcodes.contains_key(&AddressingMode::Immediate) {
+                    // immediate mode loading of values [1, 127]
+                    cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x07, 0x00]);
+                    assert_eq!(cpu.$cpu_target_register, 0x07);
+                    check_zero_and_neg_flags(&cpu, false, false);
 
-                // immediate mode value 0, for a valid test we need to pollute the register first
-                cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x07, opcodes[&AddressingMode::Immediate], 0x00, 0x00]);
-                assert_eq!(cpu.$cpu_target_register, 0x00);
-                check_zero_and_neg_flags(&cpu, true, false);
+                    // immediate mode value 0, for a valid test we need to pollute the register first
+                    cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x07, opcodes[&AddressingMode::Immediate], 0x00, 0x00]);
+                    assert_eq!(cpu.$cpu_target_register, 0x00);
+                    check_zero_and_neg_flags(&cpu, true, false);
 
-                // immediate mode negative values [128, 255]
-                cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x97, 0x00]);
-                assert_eq!(cpu.$cpu_target_register, 0x97);
-                check_zero_and_neg_flags(&cpu, false, true);
+                    // immediate mode negative values [128, 255]
+                    cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x97, 0x00]);
+                    assert_eq!(cpu.$cpu_target_register, 0x97);
+                    check_zero_and_neg_flags(&cpu, false, true);
+                }
 
                 // absolute mode loading of values [1, 127]
                 cpu.interpret(vec![opcodes[&AddressingMode::Absolute], 0x06, 0x06, 0x00, 0x05, 0x08, 0x09, 0x0A]);
@@ -885,7 +996,7 @@ mod test {
                 check_zero_and_neg_flags(&cpu, false, false);
 
                 // absolute mode value 0
-                cpu.interpret(vec![opcodes[&AddressingMode::Immediate], 0x07, opcodes[&AddressingMode::Absolute], 0x08, 0x06, 0x00, 0x05, 0x08, 0x00, 0x0A]);
+                cpu.interpret(vec![opcodes[&AddressingMode::ZeroPage], 0x01, opcodes[&AddressingMode::Absolute], 0x08, 0x06, 0x00, 0x05, 0x08, 0x00, 0x0A]);
                 assert_eq!(cpu.$cpu_target_register, 0x00);
                 check_zero_and_neg_flags(&cpu, true, false);
 
@@ -908,7 +1019,7 @@ mod test {
                         cpu.reset();
                         cpu.$addressing_register = 0x01;
             
-                        cpu.interpret_without_reset(vec![opcodes[&AddressingMode::Immediate], 0x07, opcodes[&AddressingMode::$addressing_mode], 0x08, 0x06, 0x00, 0x05, 0x08, 0x09, 0x00, 0x0B], 0x0600);
+                        cpu.interpret_without_reset(vec![opcodes[&AddressingMode::ZeroPage], 0x01, opcodes[&AddressingMode::$addressing_mode], 0x08, 0x06, 0x00, 0x05, 0x08, 0x09, 0x00, 0x0B], 0x0600);
                         assert_eq!(cpu.$cpu_target_register, 0x00);
                         check_zero_and_neg_flags(&cpu, true, false);
             
@@ -941,7 +1052,7 @@ mod test {
                 check_zero_and_neg_flags(&cpu, false, false);
 
                 cpu.reset();
-                cpu.interpret_without_reset(vec![opcodes[&AddressingMode::Immediate], 0x07, opcodes[&AddressingMode::ZeroPage], 0x08, 0x00, 0x05, 0x08, 0x09, 0x00, 0x0B, 0x0C], 0x00);
+                cpu.interpret_without_reset(vec![opcodes[&AddressingMode::ZeroPage], 0x01, opcodes[&AddressingMode::ZeroPage], 0x08, 0x00, 0x05, 0x08, 0x09, 0x00, 0x0B, 0x0C], 0x00);
                 assert_eq!(cpu.$cpu_target_register, 0x00);
                 check_zero_and_neg_flags(&cpu, true, false);
 
@@ -964,7 +1075,7 @@ mod test {
                         cpu.reset();
                         cpu.$addressing_register = 0x01;
             
-                        cpu.interpret_without_reset(vec![opcodes[&AddressingMode::Immediate], 0x07, opcodes[&AddressingMode::$addressing_mode], 0x08, 0x00, 0x05, 0x08, 0x09, 0x0B, 0x00, 0x0C], 0x00);
+                        cpu.interpret_without_reset(vec![opcodes[&AddressingMode::ZeroPage], 0x01, opcodes[&AddressingMode::$addressing_mode], 0x08, 0x00, 0x05, 0x08, 0x09, 0x0B, 0x00, 0x0C], 0x00);
                         assert_eq!(cpu.$cpu_target_register, 0x00);
                         check_zero_and_neg_flags(&cpu, true, false);
             
@@ -1000,6 +1111,19 @@ mod test {
             }
         }
     }
+
+    generate_load_test!(
+        test_lax_register_a,
+        register_a,
+        hashmap! {
+            AddressingMode::ZeroPage => 0xA7 as u8,
+            AddressingMode::ZeroPageY => 0xB7 as u8,
+            AddressingMode::Absolute => 0xAF as u8,
+            AddressingMode::AbsoluteY => 0xBF as u8,
+            AddressingMode::IndirectX => 0xA3 as u8,
+            AddressingMode::IndirectY => 0xB3 as u8,
+        }
+    );
 
     generate_load_test!(
         test_ldx,
@@ -1086,13 +1210,36 @@ mod test {
     #[test]
     fn test_nop() {
         let mut  cpu = create_new_cpu();
+        let nop_opcodes: Vec<u8> = vec![0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA];
+        let dop_opcodes: Vec<u8> = vec![0x04, 0x14, 0x34, 0x44, 0x54, 0x64, 0x74, 0x80, 0x82, 0x89, 0xC2, 0xD4, 0xE2, 0xF4];
+        let top_opcodes: Vec<u8> = vec![0x0C, 0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC];
 
-        cpu.interpret(vec![0xEA, 0xEA, 0xEA, 0xEA, 0x00]);
-        assert_eq!(cpu.program_counter, 0x0605);
-        assert_eq!(cpu.register_s, 0xFD);
-        assert_eq!(cpu.register_a, 0x00);
-        assert_eq!(cpu.register_x, 0x00);
-        assert_eq!(cpu.register_y, 0x00);
+        for opcode in nop_opcodes {
+            cpu.interpret(vec![opcode, opcode, opcode, opcode, 0x00]);
+            assert_eq!(cpu.program_counter, 0x0605);
+            assert_eq!(cpu.register_s, 0xFD);
+            assert_eq!(cpu.register_a, 0x00);
+            assert_eq!(cpu.register_x, 0x00);
+            assert_eq!(cpu.register_y, 0x00);
+        }
+
+        for opcode in dop_opcodes {
+            cpu.interpret(vec![opcode, 0x00, opcode, 0xA9, opcode, 0xA9, opcode, 0x01, 0x00]);
+            assert_eq!(cpu.program_counter, 0x0609);
+            assert_eq!(cpu.register_s, 0xFD);
+            assert_eq!(cpu.register_a, 0x00);
+            assert_eq!(cpu.register_x, 0x00);
+            assert_eq!(cpu.register_y, 0x00);
+        }
+
+        for opcode in top_opcodes {
+            cpu.interpret(vec![opcode, 0x00, 0x00, opcode, 0xA9, 0x00, opcode, 0x00, 0xA9, opcode, 0x01, 0x00, 0x00]);
+            assert_eq!(cpu.program_counter, 0x060D);
+            assert_eq!(cpu.register_s, 0xFD);
+            assert_eq!(cpu.register_a, 0x00);
+            assert_eq!(cpu.register_x, 0x00);
+            assert_eq!(cpu.register_y, 0x00);
+        }
     }
 
     #[test]
@@ -1140,6 +1287,55 @@ mod test {
             // plp sets the second break bit
             0x28, &AddressingMode::NoneAddressing, 0b0000_0101, cpu.status = 0b0000_0101, {
                 assert_eq!(cpu.status, 0b0010_0000);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+        }
+    }
+
+    #[test]
+    fn test_rla () {
+        let mut cpu = create_new_cpu();
+        let xydeviation = 7 as u8;
+        opcode_test_case!{
+            cpu,
+            // without carry set
+            0x27, &AddressingMode::ZeroPage,    0b0101_0111, cpu.register_a = 0b0101_0111, {
+                assert_eq!(cpu.last_mem_write_value, 0b1010_1110);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x37, &AddressingMode::ZeroPageX,   0b0000_0100, {cpu.register_a = 0b0000_0100; cpu.register_x = xydeviation;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_1000);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, xydeviation,
+            0x2F, &AddressingMode::Absolute,    0b1101_1110, cpu.register_a = 0b1101_1110, {
+                assert_eq!(cpu.last_mem_write_value, 0b1011_1100);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x3F, &AddressingMode::AbsoluteX,   0b0000_0000, {cpu.register_a = 0b0000_0000; cpu.register_x = xydeviation;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0000);
+                check_zero_and_neg_flags(&cpu, true, false);
+                check_carry_flag(&cpu, false);
+            }, xydeviation,
+            // with carry set
+            0x2F, &AddressingMode::Absolute, 0b0000_0101, {cpu.register_a = 0b0000_0101; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_1011);
+                assert_eq!(cpu.register_a, 0b0000_1011 & 0b0000_0101);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x2F, &AddressingMode::Absolute, 0b1000_0101, {cpu.register_a = 0b1000_0101; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_1011);
+                assert_eq!(cpu.register_a, 0b0000_0001);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x2F, &AddressingMode::Absolute, 0b0000_0000, {cpu.register_a = 0b0000_0000; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0001);
+                assert_eq!(cpu.register_a, 0b0000_0000);
                 check_zero_and_neg_flags(&cpu, false, false);
                 check_carry_flag(&cpu, false);
             }, 0,
@@ -1269,6 +1465,40 @@ mod test {
     }
 
     #[test]
+    fn test_sax () {
+        let mut cpu = create_new_cpu();
+        let xydeviation = 7 as u8;
+        opcode_test_case!{
+            cpu,
+            0x87, &AddressingMode::ZeroPage, 0x77, cpu.register_x = 0x42, {
+                assert_eq!(cpu.last_mem_write_value, 0x00);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, 0,
+            0x97, &AddressingMode::ZeroPageY, 0x77, {cpu.register_x = 0x43; cpu.register_y = xydeviation; cpu.register_a = 0x01}, {
+                assert_eq!(cpu.last_mem_write_value, 0x01);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, xydeviation,
+            0x83, &AddressingMode::IndirectX, 0x77, {cpu.register_x = 0x43; cpu.register_a = 0x01;}, {
+                assert_eq!(cpu.last_mem_write_value, 0x01);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, 0,
+            0x8F, &AddressingMode::Absolute, 0x0077, {cpu.register_x = 0xFF; cpu.register_a = 0xFF;}, {
+                assert_eq!(cpu.last_mem_write_value, 0xFF);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, 0,
+            0x8F, &AddressingMode::Absolute, 0x0077, {cpu.register_x = 0x42; cpu.register_a = 0xFF;}, {
+                assert_eq!(cpu.last_mem_write_value, 0x42);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, 0,
+            0x8F, &AddressingMode::Absolute, 0x0077, cpu.register_x = 0x42, {
+                assert_eq!(cpu.last_mem_write_value, 0x00);
+                check_zero_and_neg_flags(&cpu, false, false);
+            }, 0,
+        }
+    }
+
+
+    #[test]
     fn test_sbc () {
         let mut cpu = create_new_cpu();
         let xydeviation = 7 as u8;
@@ -1345,6 +1575,54 @@ mod test {
             0x0F, &AddressingMode::Absolute,  0b0001_0101, cpu.register_a = 0b1011_0011, assert_eq!(cpu.register_a, 0b1011_1011), 0,
             0x1F, &AddressingMode::AbsoluteX, 0b0001_0101, {cpu.register_a = 0b1011_0011; cpu.register_x = xydeviation;}, assert_eq!(cpu.register_a, 0b1011_1011), xydeviation,
             0x1B, &AddressingMode::AbsoluteY, 0b0001_0101, {cpu.register_a = 0b1011_0011; cpu.register_y = xydeviation;}, assert_eq!(cpu.register_a, 0b1011_1011), xydeviation,
+        }
+    }
+
+    #[test]
+    fn test_sre () {
+        let mut cpu = create_new_cpu();
+        let xydeviation = 5 as u8;
+        opcode_test_case!{
+            cpu,
+            // without carry set
+            0x4F, &AddressingMode::Absolute, 0b0000_0100, cpu.register_a = 0b0000_0100, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0010);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x4F, &AddressingMode::Absolute, 0b0000_0101, cpu.register_a = 0b0000_0101, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0010);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, true);
+            }, 0,
+            0x47, &AddressingMode::ZeroPage,    0b0101_0110, cpu.register_a = 0b0101_0110, {
+                assert_eq!(cpu.last_mem_write_value, 0b0010_1011);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x57, &AddressingMode::ZeroPageX,   0b0000_0100, {cpu.register_a = 0b0000_0100; cpu.register_x = xydeviation;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0010);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, false);
+            }, xydeviation,
+            0x4F, &AddressingMode::Absolute,    0b1101_1110, cpu.register_a = 0b1101_1110, {
+                assert_eq!(cpu.last_mem_write_value, 0b0110_1111);
+                assert_eq!(cpu.register_a, 0b0110_1111 ^ 0b1101_1110);
+                check_zero_and_neg_flags(&cpu, false, true);
+                check_carry_flag(&cpu, false);
+            }, 0,
+            0x5F, &AddressingMode::AbsoluteX,   0b0000_0000, {cpu.register_a = 0b0000_0000; cpu.register_x = xydeviation;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0000);
+                assert_eq!(cpu.register_a, 0b0000_0000 ^ 0b0000_0000);
+                check_zero_and_neg_flags(&cpu, true, false);
+                check_carry_flag(&cpu, false);
+            }, xydeviation,
+            0x4F, &AddressingMode::Absolute, 0b0000_0001, {cpu.register_a = 0b0000_0001; cpu.status = 0b0000_0001;}, {
+                assert_eq!(cpu.last_mem_write_value, 0b0000_0000);
+                assert_eq!(cpu.register_a, 0b0000_0000 ^ 0b0000_0001);
+                check_zero_and_neg_flags(&cpu, false, false);
+                check_carry_flag(&cpu, true);
+            }, 0,
         }
     }
 
