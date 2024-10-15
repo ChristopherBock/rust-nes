@@ -3,5 +3,11 @@ name = "rust-nes"
 version = "0.1.0"
 edition = "2021"
 
+[build-dependencies]
+dotenv = "^0.15.0"
+
 [dependencies]
 lazy_static = "1.4"
+sdl2 = "0.34.0"
+rand = "=0.7.3"
+bitflags = "^2.6.0"
